@@ -349,7 +349,7 @@ component = {}
 --- ***
 ---If `true` is passed as a second parameter, exact matching is enforced, e.g. `red` will *not* match `redstone`.
 ---  @field list fun(filter:string|componentType?, exact:boolean?): ID[]
----  @field methods(address:ID): string[] Returns a table with the names of all methods provided by the component with the specified address. The names are the keys in the table, the values indicate whether the method is called directly or not.
+---  @field methods fun(address:ID): string[] Returns a table with the names of all methods provided by the component with the specified address. The names are the keys in the table, the values indicate whether the method is called directly or not.
 ---Gets a 'proxy' object for a component that provides all methods the component provides as fields, so they can be called more directly (instead of via `invoke`). This is what's used to generate 'primaries' of the individual component types, i.e. what you get via `component.blah`.
 --- ***
 ---For example, you can use it like so: `component.proxy(component.list("redstone")()).getInput(sides.north)`, which gets you a proxy for the first `redstone` component returned by the `component.list` iterator, and then calls `getInput` on it.
