@@ -13,10 +13,10 @@ computer = {}
 ---@type ComponentAPI
 component = {}
 
---- A table that can be iterated over without calling ipairs
----@alias iterableList table
----@alias componentType "screen" | "gpu" | "computer" | "robot" | "eeprom" | "modem" | "filesystem" | "data"
----@alias proxy ScreenProxy | GPUProxy | ComputerProxy | RobotProxy | EEPROMProxy | ModemProxy | FilesystemProxy | DataProxy
+---@overload fun(): ID, componentType
+---@alias iterableIDArray ID[]
+---@alias componentType "screen" | "gpu" | "computer" | "robot" | "eeprom" | "modem" | "internet" | "filesystem" | "data"
+---@alias proxy ScreenProxy | GPUProxy | ComputerProxy | RobotProxy | EEPROMProxy | ModemProxy | InternetProxy | FilesystemProxy | DataProxy
 --- An ID (address) of a component
 ---@alias ID string
 --- Anything that can be converted to a string
@@ -103,6 +103,27 @@ component = {}
 ---  @field freeMemory           fun()                                                                                                              : integer                                        Returns the total free memory not allocated to buffers. This does not include the screen.
 ---  @field getBufferSize        fun(index?:integer)                                                                                                : integer,integer                                Returns the buffer size at `index` (default: current buffer index). Returns the screen resolution for index 0. Returns nil for invalid indexes
 ---  @field bitblt               fun(dst?:integer,col:integer,row:integer,width:integer,height:integer,src:integer,fromCol:integer,fromRow:integer)                                                  Copy a region from buffer to buffer, screen to buffer, or buffer to screen. `bitblt` should preform very fast on repeated use. If the buffer is dirty there is an initial higher cost to sync the buffer with the destination object. If you have a large number of updates to make with frequent bitblts, consider making multiple and smaller buffers. If you plan to use a static buffer (one with few or no updates), then a large buffer is just fine. Returns `true` on success.
+
+---A list of methods that component.proxy returns when the component whose ID passed in is a Internet Card.
+---@class InternetProxy : Proxy
+--- @field type "network"
+---  @field isTcpEnabled         fun(): boolean Returns whether TCP connections can be made (config setting).
+---  @field isHttpEnabled        fun(): boolean Returns whether HTTP connections can be made (config setting).
+---  @field connect              fun(address:string, port?:number): Socket Opens a new TCP connection. Returns the handle of the connection.
+---  @field request              fun(url:string, postData?:string, headers?:table): Request Sends a new HTTP request. Returns the handle of the connection.
+
+---@class Socket
+---  @field read          fun(n?:number):string   Tries to read data from the socket stream. Returns the read byte array.
+---  @field close         fun()                   Closes an open socket stream.
+---  @field write         fun(data:string):number Tries to write data to the socket stream. Returns the number of bytes written.
+---  @field finishConnect fun():boolean           Ensures a socket is connected. Errors if the connection failed.
+---  @field id            fun():string            Returns the id for this socket.
+
+---@class Request
+---  @field read          fun(n?:number):string     Tries to read data from the response. Returns the read byte array.
+---  @field response      fun():number,string,table Get response code, message and headers.
+---  @field close         fun()                     Closes an open socket stream.
+---  @field finishConnect fun():boolean             Ensures a response is available. Errors if the connection failed.
 
 ---A list of methods that component.proxy returns when the component whose ID passed in is a Computer.
 ---@class ComputerProxy : Proxy
@@ -325,18 +346,25 @@ component = {}
 
 --#region Computer
 
+---@alias DeviceInfoDeviceClass "memory" | "display" | "input" | "disk" | "processor" | "system" | "volume" | "communication" | "network"
+---@alias DeviceInfoDevice {class: DeviceInfoDeviceClass, product: string, description: string, [string]: string}
+---@alias DeviceInfo table<ID, DeviceInfoDevice>
+
 ---This API mainly provides information about the computer a Lua state is running on, such as its address and uptime. It also contains functions for user management. This could belong to the os table, but in order to keep that “clean” it's in its own API.
 ---@class ComputerAPI
----  @field address     fun()                : ID      The component address of this computer.
----  @field tmpAddress  fun()                : ID|nil  The component address of the computer's temporary file system (if any), used for mounting it on startup.
----  @field freeMemory  fun()                : integer The amount of memory currently unused, in bytes. If this gets close to zero your computer will probably soon crash with an out of memory error. Note that for OpenOS, it is highly recommended to at least have 1x tier 1.5 RAM stick or more. The os [openos] will boot on a single tier 1 ram stick, but quickly and easily run out of memory.
----  @field totalMemory fun()                : integer The total amount of memory installed in this computer, in bytes.
----  @field energy      fun()                : number  The amount of energy currently available in the network the computer is in. For a robot this is the robot's own energy / fuel level.
----  @field maxEnergy   fun()                : number  The maximum amount of energy that can be stored in the network the computer is in. For a robot this is the size of the robot's internal buffer (what you see in the robot's GUI).
----  @field uptime      fun()                : number  The time in real world seconds this computer has been running, measured based on the world time that passed since it was started - meaning this will not increase while the game is paused, for example.
----  @field shutdown    fun(reboot?: boolean)          Shuts down the computer. Optionally reboots the computer, if reboot is true, i.e. shuts down, then starts it again automatically. This function never returns. This example will reboot the computer if it has been running for at least 300 seconds(5 minutes)
----  @field pushSignal  fun(name: string, ...:Serializable?) Pushes a new signal into the queue. Signals are processed in a FIFO order. The signal has to at least have a name. Arguments to pass along with it are optional. Note that the types supported as signal parameters are limited to the basic types nil, boolean, number, string, and tables. Yes tables are supported (keep reading). Threads and functions are not supported. Note that only tables of the supported types are supported. That is, tables must compose types supported, such as other strings and numbers, or even sub tables. But not of functions or threads.    
----  @field pullSignal  fun(timeout: number?): string, ... Tries to pull a signal from the queue, waiting up to the specified amount of time before failing and returning nil. If no timeout is specified waits forever. The first returned result is the signal name, following results correspond to what was pushed in pushSignal, for example. These vary based on the event type. Generally it is more convenient to use event.pull from the event library. The return value is the very same, but the event library provides some more options. 
+---  @field address       fun()                                     : ID          The component address of this computer.
+---  @field tmpAddress    fun()                                     : ID|nil      The component address of the computer's temporary file system (if any), used for mounting it on startup.
+---  @field freeMemory    fun()                                     : integer     The amount of memory currently unused, in bytes. If this gets close to zero your computer will probably soon crash with an out of memory error. Note that for OpenOS, it is highly recommended to at least have 1x tier 1.5 RAM stick or more. The os [openos] will boot on a single tier 1 ram stick, but quickly and easily run out of memory.
+---  @field totalMemory   fun()                                     : integer     The total amount of memory installed in this computer, in bytes.
+---  @field energy        fun()                                     : number      The amount of energy currently available in the network the computer is in. For a robot this is the robot's own energy / fuel level.
+---  @field maxEnergy     fun()                                     : number      The maximum amount of energy that can be stored in the network the computer is in. For a robot this is the size of the robot's internal buffer (what you see in the robot's GUI).
+---  @field uptime        fun()                                     : number      The time in real world seconds this computer has been running, measured based on the world time that passed since it was started - meaning this will not increase while the game is paused, for example.
+---  @field shutdown      fun(reboot?: boolean)                                   Shuts down the computer. Optionally reboots the computer, if reboot is true, i.e. shuts down, then starts it again automatically. This function never returns. This example will reboot the computer if it has been running for at least 300 seconds(5 minutes)
+---  @overload            fun(pattern: string)                                    This method is overloaded taking a single string parameter as a pattern of dots `.` and dashes `-` for short and long beeps respectively.
+---  @field beep          fun(frequency?: number, duration?: number)              `frequency` must be between 20 and 2000. Causes the computer to produce a beep sound at `frquency` Hz for `duration` seconds.
+---  @field getDeviceInfo fun()                                     : DeviceInfo  Returns a table of information about installed devices in the computer.
+---  @field pushSignal    fun(name: string, ...:Serializable?)                    Pushes a new signal into the queue. Signals are processed in a FIFO order. The signal has to at least have a name. Arguments to pass along with it are optional. Note that the types supported as signal parameters are limited to the basic types nil, boolean, number, string, and tables. Yes tables are supported (keep reading). Threads and functions are not supported. Note that only tables of the supported types are supported. That is, tables must compose types supported, such as other strings and numbers, or even sub tables. But not of functions or threads.    
+---  @field pullSignal    fun(timeout: number?)                     : string, ... Tries to pull a signal from the queue, waiting up to the specified amount of time before failing and returning nil. If no timeout is specified waits forever. The first returned result is the signal name, following results correspond to what was pushed in pushSignal, for example. These vary based on the event type. Generally it is more convenient to use event.pull from the event library. The return value is the very same, but the event library provides some more options. 
 
 --#region Component
 
@@ -348,7 +376,7 @@ component = {}
 ---If `filter` is set this will only return components that contain the filter string (this is not a pattern/regular expression). For example, `component.list("red")` will return redstone components.
 --- ***
 ---If `true` is passed as a second parameter, exact matching is enforced, e.g. `red` will *not* match `redstone`.
----  @field list fun(filter:string|componentType?, exact:boolean?): ID[]
+---  @field list fun(filter:string|componentType?, exact:boolean?): iterableIDArray
 ---  @field methods fun(address:ID): string[] Returns a table with the names of all methods provided by the component with the specified address. The names are the keys in the table, the values indicate whether the method is called directly or not.
 ---Gets a 'proxy' object for a component that provides all methods the component provides as fields, so they can be called more directly (instead of via `invoke`). This is what's used to generate 'primaries' of the individual component types, i.e. what you get via `component.blah`.
 --- ***
@@ -356,31 +384,12 @@ component = {}
 --- ***
 ---Note that proxies will always have at least two fields, `type` with the component's type name, and `address` with the component's address.
 ---@field proxy fun(address: ID): proxy
-
 ---Get the component type of the component with the specified address.
----@param address string
----@return componentType
-function component.type(address)
-end
-
+---@field type fun(address: ID): componentType
 ---Return slot number which the component is installed into. Returns -1 if it doesn't otherwise make sense.
----@param address ID
----@return integer
-function component.slot(address)
-end
-
+---@field slot fun(address: ID): integer
 ---Undocumented
----@param address ID
----@return string
-function component.fields(address)
-end
-
----Tries to resolve an abbreviated address to a full address. Returns the full address on success, or `nil` and an error message otherwise. Optionally filters by component type.
----@param address string
----@param componentType componentType?
----@return ID | nil,string
-function component.get(address, componentType)
-end
+---@field fields fun(address: ID): string
 
 --#endregion
 
@@ -389,6 +398,3 @@ end
 ---@param have any
 ---@param ... any
 function checkArg(n, have, ...) end
-
---- @type ModemProxy
-local a = nil
